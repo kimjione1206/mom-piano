@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>엄마 피아노</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #2a1650; color: #fff;
+    font-family: -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+    user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
+  button { font-family: inherit; cursor: pointer; }
+  #menu { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center;
+    padding: 16px; box-sizing: border-box; overflow-y: auto; background: linear-gradient(#5b2bb5, #2fb6d8); }
+  h1 { font-size: 30px; margin: 6px 0 14px; text-shadow: 0 2px 6px rgba(0,0,0,.3); }
+  #songs { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; width: 100%; max-width: 900px; }
+  .song { font-size: 24px; font-weight: 700; padding: 18px 12px; border: none; border-radius: 18px;
+    background: #fff; color: #4a2a8a; box-shadow: 0 4px 0 rgba(0,0,0,.2); }
+  .song:active, .big:active { transform: translateY(3px); box-shadow: 0 1px 0 rgba(0,0,0,.2); }
+  #game { position: fixed; inset: 0; display: none; touch-action: none;
+    background: linear-gradient(#6a2fd0, #3ec6e0 60%, #fbfaf7 60%); }
+  canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+  #top { position: absolute; left: 0; top: 0; display: flex; align-items: center; gap: 12px; padding: 8px 12px; }
+  #back { font-size: 20px; font-weight: 700; border: none; border-radius: 14px; padding: 8px 16px;
+    background: rgba(255,255,255,.9); color: #4a2a8a; }
+  #title { font-size: 20px; font-weight: 700; text-shadow: 0 1px 4px rgba(0,0,0,.5); }
+  #done { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center;
+    justify-content: center; gap: 18px; background: rgba(30,10,60,.75); }
+  #done .msg { font-size: 40px; font-weight: 800; }
+  #done .row { display: flex; gap: 14px; }
+  .big { font-size: 24px; font-weight: 700; border: none; border-radius: 18px; padding: 16px 26px;
+    background: #fff; color: #4a2a8a; box-shadow: 0 4px 0 rgba(0,0,0,.2); }
+</style>
+</head>
+<body>
+<div id="menu">
+  <h1>🎹 엄마 피아노</h1>
+  <div id="songs"></div>
+</div>
+<div id="game">
+  <canvas id="cv"></canvas>
+  <div id="top"><button id="back">← 노래 목록</button><span id="title"></span></div>
+  <div id="done">
+    <div class="msg">🎉 다 쳤어요!</div>
+    <div class="row">
+      <button class="big" id="again">다시 치기</button>
+      <button class="big" id="other">다른 노래</button>
+    </div>
+  </div>
+</div>
+<script>
+// 노래: "음이름+옥타브:박자" (박자 생략 = 1박). 모두 흰 건반만 쓰는 다장조.
+const SONGS = [
+  { title: '나비야', bpm: 90, notes:
+    'G4 E4 E4:2 F4 D4 D4:2 C4 D4 E4 F4 G4 G4 G4:2 ' +
+    'G4 E4 E4 E4 F4 D4 D4 D4 C4 E4 G4 G4 E4 E4 E4:2 ' +
+    'D4 D4 D4 D4 D4 E4 F4:2 E4 E4 E4 E4 E4 F4 G4:2 ' +
+    'G4 E4 E4:2 F4 D4 D4:2 C4 E4 G4 G4 C4:4' },
+  { title: '반짝반짝 작은별', bpm: 85, notes:
+    'C4 C4 G4 G4 A4 A4 G4:2 F4 F4 E4 E4 D4 D4 C4:2 ' +
+    'G4 G4 F4 F4 E4 E4 D4:2 G4 G4 F4 F4 E4 E4 D4:2 ' +
+    'C4 C4 G4 G4 A4 A4 G4:2 F4 F4 E4 E4 D4 D4 C4:2' },
+  { title: '떴다 떴다 비행기', bpm: 90, notes:
+    'E4 D4 C4 D4 E4 E4 E4:2 D4 D4 D4:2 E4 G4 G4:2 ' +
+    'E4 D4 C4 D4 E4 E4 E4:2 D4 D4 E4 D4 C4:4' },
+  { title: '생일 축하합니다', bpm: 80, notes:
+    'G4:0.75 G4:0.25 A4 G4 C5 B4:2 G4:0.75 G4:0.25 A4 G4 D5 C5:2 ' +
+    'G4:0.75 G4:0.25 G5 E5 C5 B4 A4:2 F5:0.75 F5:0.25 E5 C5 D5 C5:3' },
+  { title: '환희의 송가', bpm: 90, notes:
+    'E4 E4 F4 G4 G4 F4 E4 D4 C4 C4 D4 E4 E4:1.5 D4:0.5 D4:2 ' +
+    'E4 E4 F4 G4 G4 F4 E4 D4 C4 C4 D4 E4 D4:1.5 C4:0.5 C4:2' },
+  { title: '징글벨', bpm: 100, notes:
+    'E4 E4 E4:2 E4 E4 E4:2 E4 G4 C4:1.5 D4:0.5 E4:4 ' +
+    'F4 F4 F4:1.5 F4:0.5 F4 E4 E4 E4:0.5 E4:0.5 E4 D4 D4 E4 D4:2 G4:2 ' +
+    'E4 E4 E4:2 E4 E4 E4:2 E4 G4 C4:1.5 D4:0.5 E4:4 ' +
+    'F4 F4 F4:1.5 F4:0.5 F4 E4 E4 E4:0.5 E4:0.5 G4 G4 F4 D4 C4:4' },
+];
+
+const LETTERS = 'CDEFGAB';
+const NAMES = { C: '도', D: '레', E: '미', F: '파', G: '솔', A: '라', B: '시' };
+const COLORS = { C: '#ff6b6b', D: '#ffa94d', E: '#ffd43b', F: '#69db7c', G: '#4dabf7', A: '#9775fa', B: '#f783ac' };
+const SEMI = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+const AHEAD = 4;        // 화면에 미리 보이는 박자 수
+const EARLY = 1;        // 음표가 선에 닿기 이만큼(박) 전부터 눌러도 인정
+
+const whiteIndex = n => (+n[1]) * 7 + LETTERS.indexOf(n[0]);
+const freq = n => 440 * Math.pow(2, (12 * (+n[1] + 1) + SEMI[n[0]] - 69) / 12);
+
+function parse(s) {
+  let t = 0;
+  return s.trim().split(/\s+/).map(tok => {
+    const [n, d] = tok.split(':');
+    const note = { n, t, dur: d ? +d : 1, hit: false };
+    t += note.dur;
+    return note;
+  });
+}
+
+// ---- 소리: 파일 없이 사인파 몇 개를 겹쳐 피아노 비슷한 소리를 만든다 ----
+let ac;
+function audio() {
+  if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)();
+  if (ac.state === 'suspended') ac.resume();
+  return ac;
+}
+function playNote(n) {
+  const a = audio(), f = freq(n), now = a.currentTime;
+  const out = a.createGain();
+  out.gain.setValueAtTime(0.0001, now);
+  out.gain.exponentialRampToValueAtTime(0.3, now + 0.01);
+  out.gain.exponentialRampToValueAtTime(0.0001, now + 1.6);
+  out.connect(a.destination);
+  for (const [h, v] of [[1, 1], [2, 0.4], [3, 0.2], [4, 0.1]]) {
+    const o = a.createOscillator(), g = a.createGain();
+    o.frequency.value = f * h;
+    g.gain.value = v;
+    o.connect(g).connect(out);
+    o.start(now);
+    o.stop(now + 1.7);
+  }
+}
+
+// ---- 화면 ----
+const $ = id => document.getElementById(id);
+const cv = $('cv'), ctx = cv.getContext('2d');
+let W, H, lineY, keyW;
+function resize() {
+  const dpr = window.devicePixelRatio || 1;
+  W = innerWidth; H = innerHeight;
+  cv.width = W * dpr; cv.height = H * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  lineY = Math.round(H * 0.6);
+  if (keys) keyW = W / keys.length;
+}
+addEventListener('resize', resize);
+
+let song, notes, keys, t, nextI, lastTs, running = false, finished;
+let keyFlash = [], sparks = [];
+const held = new Map();   // 손가락(pointerId) → 누르고 있는 건반 번호
+
+for (const s of SONGS) {
+  const b = document.createElement('button');
+  b.className = 'song';
+  b.textContent = s.title;
+  b.onclick = () => { audio(); startSong(s); history.pushState({ play: 1 }, '', '#play'); };
+  $('songs').appendChild(b);
+}
+
+function startSong(s) {
+  song = s;
+  notes = parse(s.notes);
+  const ids = notes.map(x => whiteIndex(x.n));
+  let lo = Math.min(...ids), hi = Math.max(...ids);
+  while (hi - lo + 1 < 8) hi++;   // 건반은 최소 8개 (도~높은 도)
+  keys = [];
+  for (let i = lo; i <= hi; i++) keys.push(LETTERS[i % 7] + Math.floor(i / 7));
+  keyFlash = keys.map(() => 0);
+  sparks = [];
+  held.clear();
+  t = -3; nextI = 0; lastTs = 0; finished = false;
+  $('title').textContent = s.title;
+  $('menu').style.display = 'none';
+  $('done').style.display = 'none';
+  $('game').style.display = 'block';
+  resize();
+  if (!running) { running = true; requestAnimationFrame(frame); }
+}
+
+function stopSong() {
+  running = false;
+  $('game').style.display = 'none';
+  $('menu').style.display = 'flex';
+}
+
+$('back').onclick = () => history.back();
+$('other').onclick = () => history.back();
+$('again').onclick = () => startSong(song);
+addEventListener('popstate', () => { if (running) stopSong(); });
+
+function frame(ts) {
+  if (!running) return;
+  const dt = lastTs ? Math.min(0.05, (ts - lastTs) / 1000) : 0;
+  lastTs = ts;
+  t += dt * song.bpm / 60;
+  // 다음 음표가 선에 닿으면 칠 때까지 기다린다
+  if (nextI < notes.length) t = Math.min(t, notes[nextI].t);
+  else if (!finished && t > notes.at(-1).t + notes.at(-1).dur + 0.5) {
+    finished = true;
+    $('done').style.display = 'flex';
+  }
+  draw(dt);
+  requestAnimationFrame(frame);
+}
+
+function press(k) {
+  const n = keys[k];
+  playNote(n);
+  keyFlash[k] = 1;
+  const next = notes[nextI];
+  if (next && next.n === n && next.t - t <= EARLY) {
+    next.hit = true;
+    nextI++;
+    for (let i = 0; i < 14; i++) {
+      const a = Math.random() * Math.PI, sp = 80 + Math.random() * 220;
+      sparks.push({ x: (k + 0.5) * keyW, y: lineY, vx: Math.cos(a) * sp, vy: -Math.sin(a) * sp,
+        life: 1, color: COLORS[n[0]] });
+    }
+  }
+}
+
+const keyAt = (x, y) => y < lineY ? -1 : Math.max(0, Math.min(keys.length - 1, Math.floor(x / keyW)));
+cv.addEventListener('pointerdown', e => {
+  const k = keyAt(e.clientX, e.clientY);
+  if (k < 0) return;
+  held.set(e.pointerId, k);
+  press(k);
+});
+cv.addEventListener('pointermove', e => {
+  if (!held.has(e.pointerId)) return;
+  const k = keyAt(e.clientX, e.clientY);
+  if (k >= 0 && k !== held.get(e.pointerId)) { held.set(e.pointerId, k); press(k); }
+});
+for (const ev of ['pointerup', 'pointercancel', 'pointerleave'])
+  cv.addEventListener(ev, e => held.delete(e.pointerId));
+
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, Math.min(r, h / 2, w / 2));
+}
+
+function draw(dt) {
+  const ppb = lineY / AHEAD;   // 1박 = 몇 픽셀
+  // 배경 그라데이션은 #game 의 CSS 가 그린다 (일부 폰 WebView 에서 캔버스 그라데이션이 안 보임)
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = 'rgba(255,255,255,0.07)';
+  for (let k = 1; k < keys.length; k++) ctx.fillRect(k * keyW - 1, 0, 2, lineY);
+
+  // 떨어지는 음표
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0, 0, W, lineY); ctx.clip();
+  for (const note of notes) {
+    const bottom = lineY - (note.t - t) * ppb;
+    const top = bottom - note.dur * ppb + 4;
+    if (bottom < 0 || top > lineY) continue;
+    const k = keys.indexOf(note.n);
+    const x = k * keyW + keyW * 0.12, w = keyW * 0.76;
+    ctx.globalAlpha = note.hit ? 0.35 : 1;
+    ctx.fillStyle = COLORS[note.n[0]];
+    roundRect(x, top, w, bottom - top, 12);
+    ctx.fill();
+    const fs = Math.min(keyW * 0.4, (bottom - top) * 0.6, 34);
+    if (fs > 10) {
+      ctx.fillStyle = '#fff';
+      ctx.font = `800 ${fs}px sans-serif`;
+      ctx.fillText(NAMES[note.n[0]], x + w / 2, bottom - Math.min(bottom - top, ppb) / 2);
+    }
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+
+  // 치는 선
+  ctx.fillStyle = '#b8f6ff';
+  ctx.shadowColor = '#b8f6ff'; ctx.shadowBlur = 14;
+  ctx.fillRect(0, lineY - 3, W, 5);
+  ctx.shadowBlur = 0;
+
+  // 건반
+  const next = notes[nextI];
+  const hintK = next && next.t - t <= EARLY ? keys.indexOf(next.n) : -1;
+  const pressed = new Set(held.values());
+  for (let k = 0; k < keys.length; k++) {
+    const x = k * keyW, n = keys[k], c = COLORS[n[0]];
+    ctx.fillStyle = '#fbfaf7';
+    ctx.fillRect(x, lineY + 2, keyW, H - lineY);
+    if (k === hintK) {   // 칠 건반을 살짝 비춘다
+      ctx.globalAlpha = 0.25 + 0.15 * Math.sin(performance.now() / 150);
+      ctx.fillStyle = c;
+      ctx.fillRect(x, lineY + 2, keyW, H - lineY);
+    }
+    ctx.globalAlpha = pressed.has(k) ? 0.7 : keyFlash[k] * 0.7;
+    ctx.fillStyle = c;
+    ctx.fillRect(x, lineY + 2, keyW, H - lineY);
+    ctx.globalAlpha = 1;
+    keyFlash[k] = Math.max(0, keyFlash[k] - dt * 4);
+    ctx.fillStyle = c;
+    ctx.fillRect(x, H - 12, keyW, 12);
+    ctx.fillStyle = '#c9c4ba';
+    ctx.fillRect(x + keyW - 1, lineY + 2, 2, H - lineY);
+    ctx.fillStyle = '#4a3a6a';
+    ctx.font = `800 ${Math.min(keyW * 0.42, 36)}px sans-serif`;
+    ctx.fillText(NAMES[n[0]], x + keyW / 2, H - (H - lineY) * 0.35);
+  }
+
+  // 반짝이
+  for (const s of sparks) {
+    s.x += s.vx * dt; s.y += s.vy * dt; s.vy += 400 * dt; s.life -= dt * 1.5;
+    ctx.globalAlpha = Math.max(0, s.life);
+    ctx.fillStyle = s.color;
+    ctx.beginPath(); ctx.arc(s.x, s.y, 5, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  sparks = sparks.filter(s => s.life > 0);
+
+  // 진행 막대
+  ctx.fillStyle = 'rgba(255,255,255,0.25)';
+  ctx.fillRect(0, 0, W, 5);
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, W * nextI / notes.length, 5);
+}
+</script>
+</body>
+</html>
